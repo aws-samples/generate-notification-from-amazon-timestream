@@ -1,0 +1,329 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Grafana Dashboard CloudFormation template on EC2 with SiteWise datasource
+Parameters:
+  InstanceType:
+    Description: Grafana EC2 instance type.
+    Type: String
+    Default: t3a.medium
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t3a.medium
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+      - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  IPRange:
+    Description: >-
+      The IP address range that can be used to connect to Grafana on the EC2
+      instance.
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  VpcId:
+    Description: The VPC which contains the public subnet.
+    Type: 'AWS::EC2::VPC::Id'
+  SubnetId:
+    Description: >-
+      The public subnet into which you want to launch CloudFormer. Make sure
+      that the subnet belongs to the above VPC.
+    Type: 'AWS::EC2::Subnet::Id'
+  Email:
+    Description: Email ID to receive notifications
+    Type: String
+    Default: ''
+Mappings:
+  UbuntuRegionMap:
+    us-west-2:
+      Ubuntu: ami-0ac73f33a1888c64a
+    eu-west-1:
+      Ubuntu: ami-0dc8d444ee2a42d8a
+    us-east-1:
+      Ubuntu: ami-03d315ad33b9d49c4
+Resources:
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !GetAtt InstanceSecurityGroup.GroupId
+      SubnetId: !Ref SubnetId
+      ImageId: !FindInMap
+        - UbuntuRegionMap
+        - !Ref 'AWS::Region'
+        - Ubuntu
+      IamInstanceProfile: !Ref EC2AdminInstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdm
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: 10
+      UserData:
+        'Fn::Base64': >
+          #!/bin/bash
+
+          # To install the latest Grafana OSS release:
+
+          echo '===== installing apt-transport-https ====='
+
+          sudo apt-get install -y apt-transport-https
+
+          echo '===== installing software-properties-common ====='
+
+          sudo apt-get install -y software-properties-common wget
+
+          echo '===== installing https://packages.grafana.com/gpg.key ====='
+
+          wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
+
+          echo '===== add-apt-repository ====='
+
+          sudo add-apt-repository "deb https://packages.grafana.com/oss/deb
+          stable main"
+
+          echo '===== sudo apt-get update ====='
+
+          sudo apt-get update
+
+          echo '===== install unzip ====='
+
+          sudo apt-get install unzip
+
+          echo '===== install grafana ====='
+
+          sudo apt-get install -y grafana
+
+          echo '===== install SiteWise datasource ====='
+
+          wget
+          https://storage.googleapis.com/integration-artifacts/grafana-iot-sitewise-datasource/0.0.1/main/latest/grafana-iot-sitewise-datasource-0.0.1.linux_amd64.zip
+
+          unzip grafana-iot-sitewise-datasource-0.0.1.linux_amd64.zip -d
+          /usr/share/grafana/plugins-bundled
+
+          echo '===== install Timestream datasource ====='
+
+          wget
+          https://grafana.com/api/plugins/grafana-timestream-datasource/versions/1.2.0/download?os=linux&arch=amd64
+
+          unzip grafana-timestream-datasource-1.2.0.linux_amd64.zip -d
+          /usr/share/grafana/plugins-bundled
+
+
+          sudo systemctl start grafana-server
+
+          sudo systemctl enable grafana-server
+  SNSTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      TopicName: Alarm-threshold-trigger
+      Subscription:
+        - Endpoint: !Ref Email
+          Protocol: email
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: ThresholdAnalysisRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  LambdaExecutionRolePolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: LambdaExecutionRolePolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 'logs:CreateLogGroup'
+            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: !Sub >-
+              arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ThresholdAnalysis:*
+          - Effect: Allow
+            Action: 'sns:Publish'
+            Resource: !Sub >-
+              arn:aws:sns:${AWS::Region}:${AWS::AccountId}:Alarm-threshold-trigger
+          - Effect: Allow
+            Action:
+              - 'timestream:Select'
+              - 'timestream:DescribeTable'
+              - 'timestream:ListMeasures'
+            Resource:
+              - !Sub >-
+                arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:database/IotTimestreamDataBase
+      Roles:
+        - Ref: LambdaExecutionRole
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: ThresholdAnalysis
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub >
+          import json
+          import os
+          import boto3
+          from botocore.config import Config
+
+          def lambda_handler(event, context):
+              session = boto3.Session()
+              write_client = session.client('timestream-write', config=Config(read_timeout=20, max_pool_connections=5000,
+                                                                              retries={'max_attempts': 10}))
+
+              result = write_client.list_databases(MaxResults=5)
+              databases = result['Databases']
+              for database in databases:
+                  print(database['DatabaseName'])
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Hello Timestream from Lambda!')
+              }
+      Runtime: python3.8
+  version:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName: !Ref LambdaFunction
+  onInvokedThreshold:
+    Type: 'AWS::Lambda::EventInvokeConfig'
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      MaximumEventAgeInSeconds: 300
+      Qualifier: !GetAtt version.Version
+  ThresholdAnalysisSchedule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Name: every5min-schedule
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn:
+            'Fn::GetAtt':
+              - LambdaFunction
+              - Arn
+          Id: TargetFunctionV1
+  PermissionForEventsToInvokeLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn:
+        'Fn::GetAtt':
+          - ThresholdAnalysisSchedule
+          - Arn
+  InstanceSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable port 3000 for grafanaand 22 for SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: !Ref IPRange
+      VpcId: !Ref VpcId
+  EC2AdminInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - Ref: EC2AdminRole
+  EC2AdminRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: '*'
+                Resource: '*'
+          PolicyName: !Join
+            - ''
+            - - EC2AdminRole
+              - Policy
+Outputs:
+  GrafanaEndpoint:
+    Description: Grafana endpoint on the newly created EC2 instance
+    Value: !Join
+      - ':'
+      - - !GetAtt EC2Instance.PublicDnsName
+        - '3000'
+  EC2RoleArn:
+    Description: EC2 Role ARN to use when configuring Grafana
+    Value: !GetAtt EC2AdminRole.Arn
