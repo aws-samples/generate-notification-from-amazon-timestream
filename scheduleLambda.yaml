@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Grafana Dashboard CloudFormation template on EC2 with SiteWise datasource
+Description: The CloudFormation template creates the following: A Lambda function, an SNS topic for publishing the results and a Grafana instance to read data from Timestream
 Parameters:
   InstanceType:
     Description: Grafana EC2 instance type.
