@@ -1,4 +1,4 @@
-## My Project
+## Timestream Notification
 
 Supporting code for blogpost on Trigger notifications on time series data with Amazon Timestream
 
