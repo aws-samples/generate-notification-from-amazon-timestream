@@ -1,15 +1,7 @@
 ## My Project
 
-TODO: Fill this README out!
+Supporting code for blogpost on Trigger notifications on time series data with Amazon Timestream
 
-Be sure to:
-
-* Change the title in this README
-* Edit your repository description on GitHub
-
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
 ## License
 
