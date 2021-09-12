@@ -57,7 +57,7 @@ def lambda_handler(event, context):
             return result
 
         if result>0 and 'temperature' in response['Rows'][0]['Data'][0]['ScalarValue']:
-            sns.publish(TopicArn='arn:aws:sns:eu-west-1:751195137645:Alarm-threshold-trigger', Message="ACTION. REQUIRED!: Average Temparature theshold exceeded. Here is the average temparature value from last 2 mins:"+response['Rows'][0]['Data'][1]['ScalarValue'], Subject="Alert")
+            sns.publish(TopicArn='arn:aws:sns:eu-west-1:<ACCOUNT_ID>:Alarm-threshold-trigger', Message="ACTION. REQUIRED!: Average Temparature theshold exceeded. Here is the average temparature value from last 2 mins:"+response['Rows'][0]['Data'][1]['ScalarValue'], Subject="Alert")
         
         
             
