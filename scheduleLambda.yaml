@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: The CloudFormation template creates the following: A Lambda function, an SNS topic for publishing the results and a Grafana instance to read data from Timestream
+Description: The CloudFormation template creates a SNS topic for publishing the results from Lambda and a Grafana instance to read data from Timestream.
 Parameters:
   InstanceType:
     Description: Grafana EC2 instance type.
@@ -104,7 +104,7 @@ Resources:
         - UbuntuRegionMap
         - !Ref 'AWS::Region'
         - Ubuntu
-      IamInstanceProfile: !Ref EC2AdminInstanceProfile
+      IamInstanceProfile: !Ref EC2GrafanaInstanceProfile
       Tags:
         - Key: Name
           Value: !Ref 'AWS::StackName'
@@ -282,20 +282,20 @@ Resources:
   InstanceSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: Enable port 3000 for grafanaand 22 for SSH
+      GroupDescription: Enable port 3000 for grafana and 22 for SSH
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 3000
           ToPort: 3000
           CidrIp: !Ref IPRange
       VpcId: !Ref VpcId
-  EC2AdminInstanceProfile:
+  EC2GrafanaInstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
       Path: /
       Roles:
-        - Ref: EC2AdminRole
-  EC2AdminRole:
+        - Ref: EC2GrafanaAccessRole
+  EC2GrafanaAccessRole:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
@@ -311,11 +311,16 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action: '*'
+                Action:
+                  - 'timestream:Select'
+                  - 'timestream:Describe*'
+                  - 'timestream:Select*'
+                  - 'timestream:List*'
+                  - 'timestream:CancelQuery'
                 Resource: '*'
           PolicyName: !Join
             - ''
-            - - EC2AdminRole
+            - - EC2GrafanaAccessRole
               - Policy
 Outputs:
   GrafanaEndpoint:
@@ -326,4 +331,4 @@ Outputs:
         - '3000'
   EC2RoleArn:
     Description: EC2 Role ARN to use when configuring Grafana
-    Value: !GetAtt EC2AdminRole.Arn
+    Value: !GetAtt EC2GrafanaAccessRole.Arn
