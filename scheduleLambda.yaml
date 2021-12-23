@@ -172,6 +172,7 @@ Resources:
     Type: 'AWS::SNS::Topic'
     Properties:
       TopicName: Alarm-threshold-trigger
+      KmsMasterKeyId: alias/aws/sns
       Subscription:
         - Endpoint: !Ref Email
           Protocol: email
